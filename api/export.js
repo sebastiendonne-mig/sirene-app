@@ -23,7 +23,7 @@ async function getUsedToday(supabase, ip) {
 
 async function fetchAllPages(params) {
   // Retire etat_administratif pour inclure actifs + cessés
-  const { etat_administratif: _ea, per_page: _pp, page: _pg, ...base } = params
+  const { per_page: _pp, page: _pg, ...base } = params
   const results = []
   let page = 1
   let total = Infinity

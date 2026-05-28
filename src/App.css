@@ -684,6 +684,33 @@ body {
   white-space: nowrap;
 }
 
+/* ─── STATUT ──────────────────────────────────────────── */
+
+.status-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0 1.25rem;
+}
+
+.status-option {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  color: var(--gray-700);
+  user-select: none;
+}
+
+.status-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--navy);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* ─── EXPORT ──────────────────────────────────────────── */
 
 .btn-export {

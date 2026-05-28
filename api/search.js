@@ -114,7 +114,7 @@ export default async function handler(req, res) {
   const t0 = Date.now()
 
   try {
-    const { naf_codes, geo, params: providedParams } = req.body ?? {}
+    const { naf_codes, geo, params: providedParams, status } = req.body ?? {}
 
     // "Voir plus" : params déjà résolus
     if (providedParams && typeof providedParams === 'object') {
@@ -132,10 +132,11 @@ export default async function handler(req, res) {
     const geoParams = await resolveGeo(geo, apiKey)
 
     // Construction des params SIRENE
+    const etat = Array.isArray(status) && status.length === 1 ? status[0] : undefined
     const params = {
       ...geoParams,
       activite_principale: naf_codes.join(','),
-      etat_administratif: 'A',
+      ...(etat ? { etat_administratif: etat } : {}),
       per_page: 10,
       page: 1,
     }

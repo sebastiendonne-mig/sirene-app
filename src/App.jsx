@@ -331,6 +331,51 @@ function StepGeo({ onBack, onSubmit, loading }) {
   )
 }
 
+// ─── ÉTAPE 4 : Statut ─────────────────────────────────────────────────────────
+function StepStatus({ onBack, onSubmit, loading }) {
+  const [active, setActive] = useState(true)
+  const [ceased, setCeased] = useState(true)
+
+  function handleSubmit() {
+    const status = []
+    if (active) status.push('A')
+    if (ceased) status.push('C')
+    onSubmit(status)
+  }
+
+  return (
+    <div className="content">
+      <div className="content-inner content-inner--narrow">
+        <button className="btn-back" onClick={onBack}>← Modifier la zone géographique</button>
+        <div className="clarification-box">
+          <p className="clarification-label">Statut des entreprises</p>
+          <p className="clarification-question">Quelles entreprises souhaitez-vous inclure ?</p>
+          <div className="status-options">
+            <label className="status-option">
+              <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+              <span>En activité</span>
+            </label>
+            <label className="status-option">
+              <input type="checkbox" checked={ceased} onChange={e => setCeased(e.target.checked)} />
+              <span>Cessées</span>
+            </label>
+          </div>
+          <div className="naf-actions">
+            <span />
+            <button
+              className="btn-confirm"
+              onClick={handleSubmit}
+              disabled={(!active && !ceased) || loading}
+            >
+              {loading ? 'Recherche…' : 'Voir les résultats'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── EXPORT ───────────────────────────────────────────────────────────────────
 function ExportPanel({ params, total, onClose }) {
   const [phase, setPhase] = useState('preview') // preview | loading | done
@@ -472,6 +517,7 @@ export default function App() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(null)
   const [geo, setGeo] = useState('')
+  const [selectedZone, setSelectedZone] = useState(null)
   const [exportOpen, setExportOpen] = useState(false)
 
   const hasMore = results !== null && results.length < total
@@ -497,12 +543,18 @@ export default function App() {
     }
   }
 
-  // Étape 3 → 4 : on lance la recherche SIRENE avec les codes NAF + la zone
-  async function handleGeoSubmit(zone) {
+  // Étape 3 → 4 : on stocke la zone et on passe à la sélection du statut
+  function handleGeoSubmit(zone) {
     const geoLabel = Array.isArray(zone)
       ? zone.map(z => z.label).join(', ')
       : typeof zone === 'string' ? zone : Object.values(zone)[0]
     setGeo(geoLabel)
+    setSelectedZone(zone)
+    setStep(4)
+  }
+
+  // Étape 4 → 5 : on lance la recherche SIRENE avec les codes NAF + zone + statut
+  async function handleStatusSubmit(status) {
     setLoading(true)
     setError(null)
     setResults(null)
@@ -510,16 +562,17 @@ export default function App() {
     try {
       const data = await apiFetch({
         naf_codes: selectedNaf,
-        geo: zone,
+        geo: selectedZone,
+        status,
       })
       setResults(data.results ?? [])
       setTotal(data.total ?? 0)
       setSearchParams(data.params)
-      setStep(4)
+      setStep(5)
       fetch(`${API_BASE}/api/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: `${activity} / ${geoLabel}`, params: data.params, results_count: data.results?.length ?? 0 }),
+        body: JSON.stringify({ query: `${activity} / ${geo}`, params: data.params, results_count: data.results?.length ?? 0 }),
       }).catch(() => {})
     } catch (err) {
       setError(ERROR_MESSAGES[err.status] ?? 'Une erreur est survenue. Vérifiez votre connexion et réessayez.')
@@ -555,6 +608,8 @@ export default function App() {
     setPage(1)
     setError(null)
     setGeo('')
+    setSelectedZone(null)
+    setExportOpen(false)
   }
 
   return (
@@ -599,9 +654,17 @@ export default function App() {
       )}
 
       {step === 4 && (
+        <StepStatus
+          onBack={() => setStep(3)}
+          onSubmit={handleStatusSubmit}
+          loading={loading}
+        />
+      )}
+
+      {step === 5 && (
         <main className="content">
           <div className="content-inner">
-            <button className="btn-back" onClick={() => setStep(3)}>← Modifier la zone</button>
+            <button className="btn-back" onClick={() => setStep(4)}>← Modifier le statut</button>
 
             {error && <div className="error-box">{error}</div>}
 
