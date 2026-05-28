@@ -684,6 +684,119 @@ body {
   white-space: nowrap;
 }
 
+/* ─── FOOTER ──────────────────────────────────────────── */
+
+.footer {
+  text-align: center;
+  padding: 2rem 1.5rem 2.5rem;
+  border-top: 1px solid var(--gray-200);
+  margin-top: auto;
+}
+
+.footer-text {
+  font-size: 0.8125rem;
+  color: var(--gray-400);
+  margin-bottom: 0.375rem;
+}
+
+.footer-links {
+  font-size: 0.8125rem;
+  color: var(--gray-400);
+}
+
+.footer-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  font-family: var(--font);
+  color: var(--gray-500);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s;
+}
+.footer-link:hover { color: var(--navy); }
+
+/* ─── MODALE ──────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal {
+  background: var(--white);
+  border-radius: var(--radius);
+  max-width: 560px;
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--gray-200);
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--gray-400);
+  font-size: 1rem;
+  padding: 0.25rem;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.modal-close:hover { color: var(--gray-900); }
+
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modal-body h3 {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--navy);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.modal-body p {
+  font-size: 0.875rem;
+  color: var(--gray-700);
+  line-height: 1.6;
+}
+
+.modal-body a {
+  color: var(--navy);
+  text-underline-offset: 2px;
+}
+
 /* ─── STATUT ──────────────────────────────────────────── */
 
 .status-options {

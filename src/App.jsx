@@ -331,6 +331,37 @@ function StepGeo({ onBack, onSubmit, loading }) {
   )
 }
 
+// ─── MODALE LÉGALE ────────────────────────────────────────────────────────────
+function LegalModal({ onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="modal-header">
+          <h2 className="modal-title">Mentions légales &amp; Confidentialité</h2>
+          <button className="modal-close" onClick={onClose} aria-label="Fermer">✕</button>
+        </div>
+        <div className="modal-body">
+          <h3>Éditeur</h3>
+          <p>Sébastien Donné — <a href="mailto:sebastiendonne@gmail.com">sebastiendonne@gmail.com</a></p>
+
+          <h3>Données</h3>
+          <p>Les données affichées sont issues de l'API SIRENE de l'INSEE, mises à disposition en open data sous licence Etalab. Elles sont fournies à titre informatif et peuvent ne pas refléter la situation la plus récente.</p>
+
+          <h3>Hébergement</h3>
+          <p>Vercel Inc. — 340 Pine Street, Suite 701, San Francisco, CA 94104, USA.</p>
+
+          <h3>Données personnelles &amp; RGPD</h3>
+          <p>Aucune donnée personnelle identifiante n'est collectée. Les seules données traitées sont des logs techniques anonymes (adresse IP, requêtes de recherche, nombre d'exports) conservés uniquement à des fins de limitation d'abus et d'amélioration du service. Ces données ne sont ni vendues ni partagées avec des tiers.</p>
+          <p>Ce site ne dépose aucun cookie de traçage ou publicitaire.</p>
+
+          <h3>Limitation de responsabilité</h3>
+          <p>Ce service est fourni en l'état, sans garantie de disponibilité ni d'exactitude des données. L'éditeur ne saurait être tenu responsable de toute utilisation faite des informations présentées.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── ÉTAPE 4 : Statut ─────────────────────────────────────────────────────────
 function StepStatus({ onBack, onSubmit, loading }) {
   const [active, setActive] = useState(true)
@@ -519,6 +550,7 @@ export default function App() {
   const [geo, setGeo] = useState('')
   const [selectedZone, setSelectedZone] = useState(null)
   const [exportOpen, setExportOpen] = useState(false)
+  const [legalOpen, setLegalOpen] = useState(false)
 
   const hasMore = results !== null && results.length < total
 
@@ -723,6 +755,16 @@ export default function App() {
           </div>
         </main>
       )}
+      <footer className="footer">
+        <p className="footer-text">Données issues de la base SIRENE — INSEE — Données publiques</p>
+        <p className="footer-links">
+          <button className="footer-link" onClick={() => setLegalOpen(true)}>Mentions légales</button>
+          {' · '}
+          <button className="footer-link" onClick={() => setLegalOpen(true)}>Politique de confidentialité</button>
+        </p>
+      </footer>
+
+      {legalOpen && <LegalModal onClose={() => setLegalOpen(false)} />}
     </div>
   )
 }
