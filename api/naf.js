@@ -19,15 +19,14 @@ export default async function handler(req, res) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 600,
-        system: `Tu es un expert de la nomenclature NAF/APE française.
-Pour une activité ou un secteur donné, retourne les codes NAF les plus pertinents.
-Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans commentaire.
+        system: `Tu es un expert de la nomenclature NAF rév.2 officielle française (INSEE).
+Retourne UNIQUEMENT des codes NAF qui existent réellement dans cette nomenclature.
+Ne jamais inventer un code — si tu n'es pas certain qu'il existe, ne pas l'inclure.
+Réponds UNIQUEMENT avec un objet JSON valide, sans markdown.
 Format : { "codes": [ { "code": "62.01Z", "label": "Programmation informatique" }, ... ] }
-Maximum 8 codes. Ordonne du plus pertinent au moins pertinent.
-Si l'activité correspond à un sigle ambigu (ex: ESN peut être ESN informatique ou SIAE), inclus les codes des deux interprétations principales.
-Inclus toujours des codes distincts couvrant les sous-activités proches du secteur.`,
+Maximum 6 codes, du plus pertinent au moins pertinent.`,
         messages: [{ role: 'user', content: activity }],
       }),
     })
