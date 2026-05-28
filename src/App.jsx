@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import './App.css'
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : ''
@@ -224,9 +224,62 @@ function StepNAF({ nafCodes, selected, onChange, onBack, onNext, activity }) {
   )
 }
 
-// ─── ÉTAPE 3 : Zone géographique ─────────────────────────────────────────────
+// ─── ÉTAPE 3 : Zone géographique avec autocomplete ───────────────────────────
 function StepGeo({ onBack, onSubmit, loading }) {
   const [value, setValue] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [open, setOpen] = useState(false)
+  const debounceRef = useRef(null)
+  const wrapperRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  function handleChange(e) {
+    const q = e.target.value
+    setValue(q)
+    clearTimeout(debounceRef.current)
+    if (q.length < 2) { setSuggestions([]); setOpen(false); return }
+    debounceRef.current = setTimeout(() => fetchSuggestions(q), 300)
+  }
+
+  async function fetchSuggestions(q) {
+    const enc = encodeURIComponent(q)
+    const [communes, depts, regions] = await Promise.allSettled([
+      fetch(`https://geo.api.gouv.fr/communes?nom=${enc}&boost=population&limit=4&fields=nom,codesPostaux,codeDepartement`).then(r => r.json()),
+      fetch(`https://geo.api.gouv.fr/departements?nom=${enc}&limit=3&fields=nom,code`).then(r => r.json()),
+      fetch(`https://geo.api.gouv.fr/regions?nom=${enc}&limit=2&fields=nom,code`).then(r => r.json()),
+    ])
+    const results = []
+    if (communes.status === 'fulfilled' && Array.isArray(communes.value)) {
+      communes.value.forEach(c => {
+        const cp = c.codesPostaux?.[0] ?? ''
+        results.push({ label: cp ? `${c.nom} (${cp})` : c.nom, type: 'Commune', params: cp ? { code_postal: cp } : { q: c.nom } })
+      })
+    }
+    if (depts.status === 'fulfilled' && Array.isArray(depts.value)) {
+      depts.value.forEach(d => results.push({ label: `${d.nom} (${d.code})`, type: 'Département', params: { departement: d.code } }))
+    }
+    if (regions.status === 'fulfilled' && Array.isArray(regions.value)) {
+      regions.value.forEach(r => results.push({ label: r.nom, type: 'Région', params: { region: r.code } }))
+    }
+    setSuggestions(results)
+    setOpen(results.length > 0)
+  }
+
+  function handleSelect(s) {
+    setValue(s.label)
+    setOpen(false)
+    onSubmit(s.params)
+  }
+
   return (
     <div className="content">
       <div className="content-inner content-inner--narrow">
@@ -235,14 +288,29 @@ function StepGeo({ onBack, onSubmit, loading }) {
           <p className="clarification-label">Zone géographique</p>
           <p className="clarification-question">Dans quelle zone souhaitez-vous rechercher ?</p>
           <form className="clarification-form" onSubmit={e => { e.preventDefault(); if (value.trim()) onSubmit(value.trim()) }}>
-            <input
-              className="clarification-input"
-              value={value}
-              onChange={e => setValue(e.target.value)}
-              placeholder="Ville, département ou code postal…"
-              autoFocus
-              disabled={loading}
-            />
+            <div className="geo-autocomplete" ref={wrapperRef}>
+              <input
+                className="clarification-input"
+                value={value}
+                onChange={handleChange}
+                placeholder="Ville, département ou région…"
+                autoFocus
+                disabled={loading}
+                autoComplete="off"
+              />
+              {open && (
+                <ul className="geo-suggestions">
+                  {suggestions.map((s, i) => (
+                    <li key={i}>
+                      <button type="button" className="geo-suggestion-item" onMouseDown={() => handleSelect(s)}>
+                        <span className="geo-suggestion-label">{s.label}</span>
+                        <span className="geo-suggestion-type">{s.type}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <button className="btn-confirm" type="submit" disabled={!value.trim() || loading}>
               {loading ? 'Recherche…' : 'Lancer'}
             </button>
@@ -294,7 +362,8 @@ export default function App() {
 
   // Étape 3 → 4 : on lance la recherche SIRENE avec les codes NAF + la zone
   async function handleGeoSubmit(zone) {
-    setGeo(zone)
+    const geoLabel = typeof zone === 'string' ? zone : Object.values(zone)[0]
+    setGeo(geoLabel)
     setLoading(true)
     setError(null)
     setResults(null)
@@ -311,7 +380,7 @@ export default function App() {
       fetch(`${API_BASE}/api/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: `${activity} / ${zone}`, params: data.params, results_count: data.results?.length ?? 0 }),
+        body: JSON.stringify({ query: `${activity} / ${geoLabel}`, params: data.params, results_count: data.results?.length ?? 0 }),
       }).catch(() => {})
     } catch (err) {
       setError(ERROR_MESSAGES[err.status] ?? 'Une erreur est survenue. Vérifiez votre connexion et réessayez.')

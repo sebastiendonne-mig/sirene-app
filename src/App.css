@@ -618,3 +618,68 @@ body {
   transition: color 0.15s;
 }
 .btn-select-all:hover { color: var(--navy); }
+
+/* ─── GEO AUTOCOMPLETE ────────────────────────────────────── */
+
+.geo-autocomplete {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+.geo-autocomplete .clarification-input {
+  width: 100%;
+}
+
+.geo-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  list-style: none;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.geo-suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--gray-100);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 0.875rem;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.geo-suggestions li:last-child .geo-suggestion-item {
+  border-bottom: none;
+}
+
+.geo-suggestion-item:hover {
+  background: var(--gray-100);
+}
+
+.geo-suggestion-label {
+  color: var(--gray-900);
+  flex: 1;
+}
+
+.geo-suggestion-type {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-400);
+  white-space: nowrap;
+}

@@ -48,6 +48,9 @@ async function callSirene(params, res) {
 
 // Résout la zone geo (ville / dept / CP / région) en paramètre SIRENE
 async function resolveGeo(geo, apiKey) {
+  // Objet déjà résolu (depuis l'autocomplete front)
+  if (geo && typeof geo === 'object') return geo
+
   // Détection directe : code département 2 chiffres
   if (/^\d{2}$/.test(geo.trim())) {
     return { departement: geo.trim() }
@@ -108,7 +111,7 @@ export default async function handler(req, res) {
 
     // Validation
     if (!naf_codes?.length) return res.status(400).json({ error: 'Paramètre naf_codes manquant' })
-    if (!geo?.trim()) return res.status(400).json({ error: 'Paramètre geo manquant' })
+    if (!geo || (typeof geo === 'string' && !geo.trim())) return res.status(400).json({ error: 'Paramètre geo manquant' })
 
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY absente' })
