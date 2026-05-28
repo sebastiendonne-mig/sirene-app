@@ -129,7 +129,7 @@ export default async function handler(req, res) {
     if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY absente' })
 
     // Résolution geo
-    const geoParams = await resolveGeo(geo.trim(), apiKey)
+    const geoParams = await resolveGeo(geo, apiKey)
 
     // Construction des params SIRENE
     const params = {
