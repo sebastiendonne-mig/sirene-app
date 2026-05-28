@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import './App.css'
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : ''
@@ -331,6 +331,132 @@ function StepGeo({ onBack, onSubmit, loading }) {
   )
 }
 
+// ─── EXPORT ───────────────────────────────────────────────────────────────────
+function ExportPanel({ params, total, onClose }) {
+  const [phase, setPhase] = useState('preview') // preview | loading | done
+  const [remaining, setRemaining] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/export-quota`)
+      .then(r => r.json())
+      .then(d => setRemaining(d.remaining ?? 2))
+      .catch(() => setRemaining(2))
+  }, [])
+
+  async function runExport(format) {
+    setPhase('loading')
+    setError(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ params, format }),
+      })
+      const json = await res.json()
+      if (json.error === 'limit_reached') {
+        setError('Vous avez atteint la limite de 2 exports gratuits par jour. Revenez demain ou contactez-nous.')
+        setPhase('preview')
+        return
+      }
+      if (json.error) throw new Error(json.error)
+      await generateFile(json.data, format)
+      setRemaining(json.remaining ?? 0)
+      setPhase('done')
+    } catch {
+      setError("Une erreur est survenue lors de l'export. Réessayez.")
+      setPhase('preview')
+    }
+  }
+
+  async function generateFile(data, format) {
+    const ts = new Date().toISOString().slice(0, 10)
+    const name = `sirene-export-${ts}`
+    if (format === 'json') {
+      dl(JSON.stringify(data, null, 2), `${name}.json`, 'application/json')
+    } else if (format === 'csv') {
+      dl(toCSV(data), `${name}.csv`, 'text/csv;charset=utf-8;')
+    } else {
+      const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm')
+      const ws = XLSX.utils.json_to_sheet(data)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Export SIRENE')
+      XLSX.writeFile(wb, `${name}.xlsx`)
+    }
+  }
+
+  function toCSV(rows) {
+    if (!rows.length) return ''
+    const cols = Object.keys(rows[0])
+    const esc = v => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+    return [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\n')
+  }
+
+  function dl(content, filename, mime) {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([content], { type: mime }))
+    a.download = filename
+    a.click()
+  }
+
+  return (
+    <div className="export-panel">
+      <div className="export-panel-header">
+        <span className="export-panel-title">Exporter les résultats</span>
+        <button className="export-panel-close" onClick={onClose}>✕</button>
+      </div>
+
+      {error && <div className="error-box" style={{ marginBottom: '1rem' }}>{error}</div>}
+
+      {phase === 'loading' ? (
+        <div>
+          <div className="status-wrap" style={{ padding: '0.75rem 0' }}>
+            <span className="spinner" />
+            <p className="status-msg">Récupération de {total.toLocaleString('fr-FR')} résultats…</p>
+          </div>
+          <div className="export-progress-bar"><div className="export-progress-fill" /></div>
+        </div>
+      ) : (
+        <>
+          <div className="export-summary">
+            <p>Vous allez exporter <strong>{total.toLocaleString('fr-FR')} entreprises</strong> (actives + cessées) avec les champs suivants :</p>
+            <ul className="export-fields-list">
+              <li><strong>Identité :</strong> SIREN, nom, sigle, date de création, date de fermeture, statut</li>
+              <li><strong>Activité :</strong> code NAF, libellé, forme juridique, catégorie, effectif</li>
+              <li><strong>Siège :</strong> adresse complète, code postal, ville, GPS</li>
+              <li><strong>Dirigeant :</strong> nom, prénom, qualité</li>
+              <li><strong>Finances :</strong> CA, résultat net, année (quand disponibles)</li>
+              <li><strong>Labels :</strong> ESS, Qualiopi, RGE, auto-entrepreneur</li>
+            </ul>
+          </div>
+
+          {phase === 'preview' && (
+            <div className="export-actions">
+              <button className="btn-export-format" onClick={() => runExport('csv')}>CSV</button>
+              <button className="btn-export-format" onClick={() => runExport('excel')}>Excel</button>
+              <button className="btn-export-format" onClick={() => runExport('json')}>JSON</button>
+            </div>
+          )}
+
+          {phase === 'done' && (
+            <div className="export-done">
+              <span>Téléchargement lancé !</span>
+              <button className="btn-export-format btn-export-format--secondary" onClick={() => setPhase('preview')}>
+                Exporter à nouveau
+              </button>
+            </div>
+          )}
+
+          <p className="export-quota">
+            2 exports gratuits par jour
+            {remaining !== null && ` — il vous reste ${remaining} export${remaining !== 1 ? 's' : ''}`}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
   // step: 1=saisie | 2=naf | 3=geo | 4=résultats
@@ -346,6 +472,7 @@ export default function App() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(null)
   const [geo, setGeo] = useState('')
+  const [exportOpen, setExportOpen] = useState(false)
 
   const hasMore = results !== null && results.length < total
 
@@ -494,7 +621,20 @@ export default function App() {
                   <span className="results-shown">
                     {results.length} affiché{results.length > 1 ? 's' : ''}
                   </span>
+                  {results.length > 0 && (
+                    <button className="btn-export" onClick={() => setExportOpen(v => !v)}>
+                      {exportOpen ? 'Fermer' : 'Exporter'}
+                    </button>
+                  )}
                 </div>
+
+                {exportOpen && results.length > 0 && searchParams && (
+                  <ExportPanel
+                    params={searchParams}
+                    total={total}
+                    onClose={() => setExportOpen(false)}
+                  />
+                )}
 
                 {results.length === 0
                   ? <p className="status-msg">Aucun résultat pour cette recherche.</p>
