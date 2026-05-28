@@ -224,7 +224,7 @@ function StepNAF({ nafCodes, selected, onChange, onBack, onNext, activity }) {
   )
 }
 
-// ─── ÉTAPE 3 : Zone géographique multiselect ─────────────────────────────────
+// ─── ÉTAPE 3 : Zone géographique multiselect (communes + depts + régions) ─────
 function StepGeo({ onBack, onSubmit, loading }) {
   const [value, setValue] = useState('')
   const [suggestions, setSuggestions] = useState([])
@@ -242,24 +242,40 @@ function StepGeo({ onBack, onSubmit, loading }) {
   async function fetchSuggestions(q) {
     try {
       const enc = encodeURIComponent(q)
-      const communes = await fetch(
-        `https://geo.api.gouv.fr/communes?nom=${enc}&boost=population&limit=5&fields=nom,codesPostaux,codeDepartement`
-      ).then(r => r.json())
+      const [communesRes, deptsRes, regionsRes] = await Promise.allSettled([
+        fetch(`https://geo.api.gouv.fr/communes?nom=${enc}&boost=population&limit=5&fields=nom,codesPostaux,codeDepartement`).then(r => r.json()),
+        fetch(`https://geo.api.gouv.fr/departements?nom=${enc}&limit=3&fields=nom,code`).then(r => r.json()),
+        fetch(`https://geo.api.gouv.fr/regions?nom=${enc}&limit=2&fields=nom,code`).then(r => r.json()),
+      ])
       const results = []
-      communes.forEach(c => {
-        ;(c.codesPostaux ?? []).forEach(cp => {
-          results.push({ label: `${c.nom} (${cp})`, code_postal: cp })
+      if (communesRes.status === 'fulfilled' && Array.isArray(communesRes.value)) {
+        communesRes.value.forEach(c => {
+          ;(c.codesPostaux ?? []).forEach(cp => {
+            results.push({ id: `commune-${cp}`, label: `${c.nom} (${cp})`, type: 'commune', code_postal: cp })
+          })
         })
-      })
-      setSuggestions(results.slice(0, 8))
+      }
+      if (deptsRes.status === 'fulfilled' && Array.isArray(deptsRes.value)) {
+        deptsRes.value.forEach(d => {
+          results.push({ id: `dept-${d.code}`, label: `${d.nom} (${d.code}) — tout le département`, type: 'departement', code: d.code })
+        })
+      }
+      if (regionsRes.status === 'fulfilled' && Array.isArray(regionsRes.value)) {
+        regionsRes.value.forEach(r => {
+          results.push({ id: `region-${r.code}`, label: `${r.nom} — toute la région`, type: 'region', code: r.code })
+        })
+      }
+      setSuggestions(results.slice(0, 10))
       setSelected([])
     } catch {
       setSuggestions([])
     }
   }
 
-  function toggle(cp) {
-    setSelected(prev => prev.includes(cp) ? prev.filter(c => c !== cp) : [...prev, cp])
+  function toggle(s) {
+    setSelected(prev =>
+      prev.some(x => x.id === s.id) ? prev.filter(x => x.id !== s.id) : [...prev, s]
+    )
   }
 
   return (
@@ -273,7 +289,7 @@ function StepGeo({ onBack, onSubmit, loading }) {
             className="clarification-input"
             value={value}
             onChange={handleChange}
-            placeholder="Ville ou code postal…"
+            placeholder="Ville, département ou région…"
             autoFocus
             disabled={loading}
             autoComplete="off"
@@ -284,12 +300,12 @@ function StepGeo({ onBack, onSubmit, loading }) {
               <div className="naf-grid">
                 {suggestions.map(s => (
                   <button
-                    key={s.code_postal}
+                    key={s.id}
                     type="button"
-                    className={`naf-item${selected.includes(s.code_postal) ? ' naf-item--selected' : ''}`}
-                    onClick={() => toggle(s.code_postal)}
+                    className={`naf-item${selected.some(x => x.id === s.id) ? ' naf-item--selected' : ''}`}
+                    onClick={() => toggle(s)}
                   >
-                    <span className="naf-item-check">{selected.includes(s.code_postal) ? '✓' : ''}</span>
+                    <span className="naf-item-check">{selected.some(x => x.id === s.id) ? '✓' : ''}</span>
                     <span className="naf-item-body">
                       <span className="naf-item-label">{s.label}</span>
                     </span>
@@ -301,7 +317,7 @@ function StepGeo({ onBack, onSubmit, loading }) {
                 <button
                   className="btn-confirm"
                   type="button"
-                  onClick={() => onSubmit({ code_postal: selected.join(',') })}
+                  onClick={() => onSubmit(selected)}
                   disabled={selected.length === 0 || loading}
                 >
                   {loading ? 'Recherche…' : `Lancer${selected.length > 0 ? ` (${selected.length})` : ''}`}
@@ -356,7 +372,9 @@ export default function App() {
 
   // Étape 3 → 4 : on lance la recherche SIRENE avec les codes NAF + la zone
   async function handleGeoSubmit(zone) {
-    const geoLabel = typeof zone === 'string' ? zone : Object.values(zone)[0]
+    const geoLabel = Array.isArray(zone)
+      ? zone.map(z => z.label).join(', ')
+      : typeof zone === 'string' ? zone : Object.values(zone)[0]
     setGeo(geoLabel)
     setLoading(true)
     setError(null)

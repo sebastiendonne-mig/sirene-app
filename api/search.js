@@ -48,6 +48,16 @@ async function callSirene(params, res) {
 
 // Résout la zone geo (ville / dept / CP / région) en paramètre SIRENE
 async function resolveGeo(geo, apiKey) {
+  // Tableau de sélections mixtes (communes + depts + régions)
+  if (Array.isArray(geo)) {
+    const depts = geo.filter(g => g.type === 'departement')
+    const regions = geo.filter(g => g.type === 'region')
+    const communes = geo.filter(g => g.type === 'commune')
+    if (depts.length > 0) return { departement: depts[0].code }
+    if (regions.length > 0) return { region: regions[0].code }
+    if (communes.length > 0) return { code_postal: communes.map(c => c.code_postal).join(',') }
+    return {}
+  }
   // Objet déjà résolu (depuis l'autocomplete front)
   if (geo && typeof geo === 'object') return geo
 
@@ -111,7 +121,7 @@ export default async function handler(req, res) {
 
     // Validation
     if (!naf_codes?.length) return res.status(400).json({ error: 'Paramètre naf_codes manquant' })
-    if (!geo || (typeof geo === 'string' && !geo.trim())) return res.status(400).json({ error: 'Paramètre geo manquant' })
+    if (!geo || (typeof geo === 'string' && !geo.trim()) || (Array.isArray(geo) && !geo.length)) return res.status(400).json({ error: 'Paramètre geo manquant' })
 
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY absente' })
