@@ -1,4 +1,6 @@
-import nafCodes from './naf-codes.json' assert { type: 'json' }
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
+const nafCodes = require('./naf-codes.json')
 
 const codesList = nafCodes.map(c => c.code + ': ' + c.label).join('\n')
 
