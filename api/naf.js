@@ -19,7 +19,7 @@ export default async function handler(req, res) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 600,
         system: `Tu es un expert de la nomenclature NAF rév.2 officielle française (INSEE).
 Retourne UNIQUEMENT des codes NAF qui existent réellement dans cette nomenclature.

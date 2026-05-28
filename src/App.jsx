@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import './App.css'
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : ''
@@ -224,60 +224,42 @@ function StepNAF({ nafCodes, selected, onChange, onBack, onNext, activity }) {
   )
 }
 
-// ─── ÉTAPE 3 : Zone géographique avec autocomplete ───────────────────────────
+// ─── ÉTAPE 3 : Zone géographique multiselect ─────────────────────────────────
 function StepGeo({ onBack, onSubmit, loading }) {
   const [value, setValue] = useState('')
   const [suggestions, setSuggestions] = useState([])
-  const [open, setOpen] = useState(false)
+  const [selected, setSelected] = useState([])
   const debounceRef = useRef(null)
-  const wrapperRef = useRef(null)
-
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
 
   function handleChange(e) {
     const q = e.target.value
     setValue(q)
     clearTimeout(debounceRef.current)
-    if (q.length < 2) { setSuggestions([]); setOpen(false); return }
+    if (q.length < 2) { setSuggestions([]); setSelected([]); return }
     debounceRef.current = setTimeout(() => fetchSuggestions(q), 300)
   }
 
   async function fetchSuggestions(q) {
-    const enc = encodeURIComponent(q)
-    const [communes, depts, regions] = await Promise.allSettled([
-      fetch(`https://geo.api.gouv.fr/communes?nom=${enc}&boost=population&limit=4&fields=nom,codesPostaux,codeDepartement`).then(r => r.json()),
-      fetch(`https://geo.api.gouv.fr/departements?nom=${enc}&limit=3&fields=nom,code`).then(r => r.json()),
-      fetch(`https://geo.api.gouv.fr/regions?nom=${enc}&limit=2&fields=nom,code`).then(r => r.json()),
-    ])
-    const results = []
-    if (communes.status === 'fulfilled' && Array.isArray(communes.value)) {
-      communes.value.forEach(c => {
-        const cp = c.codesPostaux?.[0] ?? ''
-        results.push({ label: cp ? `${c.nom} (${cp})` : c.nom, type: 'Commune', params: cp ? { code_postal: cp } : { q: c.nom } })
+    try {
+      const enc = encodeURIComponent(q)
+      const communes = await fetch(
+        `https://geo.api.gouv.fr/communes?nom=${enc}&boost=population&limit=5&fields=nom,codesPostaux,codeDepartement`
+      ).then(r => r.json())
+      const results = []
+      communes.forEach(c => {
+        ;(c.codesPostaux ?? []).forEach(cp => {
+          results.push({ label: `${c.nom} (${cp})`, code_postal: cp })
+        })
       })
+      setSuggestions(results.slice(0, 8))
+      setSelected([])
+    } catch {
+      setSuggestions([])
     }
-    if (depts.status === 'fulfilled' && Array.isArray(depts.value)) {
-      depts.value.forEach(d => results.push({ label: `${d.nom} (${d.code})`, type: 'Département', params: { departement: d.code } }))
-    }
-    if (regions.status === 'fulfilled' && Array.isArray(regions.value)) {
-      regions.value.forEach(r => results.push({ label: r.nom, type: 'Région', params: { region: r.code } }))
-    }
-    setSuggestions(results)
-    setOpen(results.length > 0)
   }
 
-  function handleSelect(s) {
-    setValue(s.label)
-    setOpen(false)
-    onSubmit(s.params)
+  function toggle(cp) {
+    setSelected(prev => prev.includes(cp) ? prev.filter(c => c !== cp) : [...prev, cp])
   }
 
   return (
@@ -287,34 +269,46 @@ function StepGeo({ onBack, onSubmit, loading }) {
         <div className="clarification-box">
           <p className="clarification-label">Zone géographique</p>
           <p className="clarification-question">Dans quelle zone souhaitez-vous rechercher ?</p>
-          <form className="clarification-form" onSubmit={e => { e.preventDefault(); if (value.trim()) onSubmit(value.trim()) }}>
-            <div className="geo-autocomplete" ref={wrapperRef}>
-              <input
-                className="clarification-input"
-                value={value}
-                onChange={handleChange}
-                placeholder="Ville, département ou région…"
-                autoFocus
-                disabled={loading}
-                autoComplete="off"
-              />
-              {open && (
-                <ul className="geo-suggestions">
-                  {suggestions.map((s, i) => (
-                    <li key={i}>
-                      <button type="button" className="geo-suggestion-item" onMouseDown={() => handleSelect(s)}>
-                        <span className="geo-suggestion-label">{s.label}</span>
-                        <span className="geo-suggestion-type">{s.type}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <button className="btn-confirm" type="submit" disabled={!value.trim() || loading}>
-              {loading ? 'Recherche…' : 'Lancer'}
-            </button>
-          </form>
+          <input
+            className="clarification-input"
+            value={value}
+            onChange={handleChange}
+            placeholder="Ville ou code postal…"
+            autoFocus
+            disabled={loading}
+            autoComplete="off"
+            style={{ marginBottom: suggestions.length > 0 ? '1rem' : 0 }}
+          />
+          {suggestions.length > 0 && (
+            <>
+              <div className="naf-grid">
+                {suggestions.map(s => (
+                  <button
+                    key={s.code_postal}
+                    type="button"
+                    className={`naf-item${selected.includes(s.code_postal) ? ' naf-item--selected' : ''}`}
+                    onClick={() => toggle(s.code_postal)}
+                  >
+                    <span className="naf-item-check">{selected.includes(s.code_postal) ? '✓' : ''}</span>
+                    <span className="naf-item-body">
+                      <span className="naf-item-label">{s.label}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="naf-actions">
+                <span />
+                <button
+                  className="btn-confirm"
+                  type="button"
+                  onClick={() => onSubmit({ code_postal: selected.join(',') })}
+                  disabled={selected.length === 0 || loading}
+                >
+                  {loading ? 'Recherche…' : `Lancer${selected.length > 0 ? ` (${selected.length})` : ''}`}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -351,7 +345,7 @@ export default function App() {
         body: JSON.stringify({ activity: value }),
       }).then(r => r.json())
       setNafCodes(data.codes ?? [])
-      setSelectedNaf((data.codes ?? []).map(c => c.code))
+      setSelectedNaf([])
       setStep(2)
     } catch {
       setError('Impossible de récupérer les codes NAF. Réessayez.')
