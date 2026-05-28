@@ -560,11 +560,17 @@ export default function App() {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetch(`${API_BASE}/api/naf`, {
+      const r = await fetch(`${API_BASE}/api/naf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activity: value }),
-      }).then(r => r.json())
+      })
+      if (r.status === 429) {
+        setError('Trop de recherches. Réessayez dans une heure.')
+        return
+      }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const data = await r.json()
       setNafCodes(data.codes ?? [])
       setSelectedNaf([])
       setStep(2)

@@ -1,3 +1,5 @@
+import { checkRateLimit } from './rate-limit.js'
+
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
 function withTimeout(promise, ms, label) {
@@ -112,14 +114,21 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
 
   const t0 = Date.now()
+  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() ?? req.socket?.remoteAddress ?? 'unknown'
 
   try {
     const { naf_codes, geo, params: providedParams, status } = req.body ?? {}
 
-    // "Voir plus" : params déjà résolus
+    // "Voir plus" : params déjà résolus — rate limit appliqué quand même
     if (providedParams && typeof providedParams === 'object') {
+      const { allowed } = await checkRateLimit(ip, 'api/search', 50, 60)
+      if (!allowed) return res.status(429).json({ error: 'rate_limit', message: 'Limite atteinte, réessayez dans une heure' })
       return await callSirene(providedParams, res)
     }
+
+    // Rate limiting
+    const { allowed } = await checkRateLimit(ip, 'api/search', 50, 60)
+    if (!allowed) return res.status(429).json({ error: 'rate_limit', message: 'Limite atteinte, réessayez dans une heure' })
 
     // Validation
     if (!naf_codes?.length) return res.status(400).json({ error: 'Paramètre naf_codes manquant' })
