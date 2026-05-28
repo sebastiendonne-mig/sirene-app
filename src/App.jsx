@@ -155,7 +155,7 @@ function StepActivity({ onSubmit, loading }) {
             className="search-input"
             value={value}
             onChange={e => setValue(e.target.value)}
-            placeholder="Plombier, ESN, boulanger, notaire…"
+            placeholder="Plombier, boulanger, informatique, notaire…"
             disabled={loading}
             autoFocus
           />

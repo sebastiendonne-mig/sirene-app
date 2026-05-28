@@ -61,13 +61,15 @@ async function resolveGeo(geo, apiKey) {
   // Objet déjà résolu (depuis l'autocomplete front)
   if (geo && typeof geo === 'object') return geo
 
+  if (typeof geo === 'string') geo = geo.trim()
+
   // Détection directe : code département 2 chiffres
-  if (/^\d{2}$/.test(geo.trim())) {
-    return { departement: geo.trim() }
+  if (/^\d{2}$/.test(geo)) {
+    return { departement: geo }
   }
   // Code postal 5 chiffres
-  if (/^\d{5}$/.test(geo.trim())) {
-    return { code_postal: geo.trim() }
+  if (/^\d{5}$/.test(geo)) {
+    return { code_postal: geo }
   }
 
   // Sinon on demande à Claude de résoudre
