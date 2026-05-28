@@ -1,3 +1,7 @@
+import nafCodes from './naf-codes.json' assert { type: 'json' }
+
+const codesList = nafCodes.map(c => c.code + ': ' + c.label).join('\n')
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -26,7 +30,10 @@ Retourne UNIQUEMENT des codes NAF qui existent réellement dans cette nomenclatu
 Ne jamais inventer un code — si tu n'es pas certain qu'il existe, ne pas l'inclure.
 Réponds UNIQUEMENT avec un objet JSON valide, sans markdown.
 Format : { "codes": [ { "code": "62.01Z", "label": "Programmation informatique" }, ... ] }
-Maximum 6 codes, du plus pertinent au moins pertinent.`,
+Maximum 6 codes, du plus pertinent au moins pertinent.
+Voici tous les codes NAF valides :
+${codesList}
+Utilise UNIQUEMENT des codes de cette liste exacte.`,
         messages: [{ role: 'user', content: activity }],
       }),
     })
