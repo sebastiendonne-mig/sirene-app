@@ -1,5 +1,6 @@
 import { createRequire } from 'module'
 import { checkRateLimit } from './rate-limit.js'
+import { nafSystemPrompt } from '../prompts/sirenePrompts.js'
 
 const require = createRequire(import.meta.url)
 const nafCodes = require('./naf-codes.json')
@@ -43,15 +44,8 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 600,
-          system: `Tu es un expert de la nomenclature NAF rév.2 officielle française (INSEE).
-Retourne UNIQUEMENT des codes NAF qui existent réellement dans cette nomenclature.
-Ne jamais inventer un code — si tu n'es pas certain qu'il existe, ne pas l'inclure.
-Réponds UNIQUEMENT avec un objet JSON valide, sans markdown.
-Format : { "codes": [ { "code": "62.01Z", "label": "Programmation informatique" }, ... ] }
-Maximum 6 codes, du plus pertinent au moins pertinent.
-Voici tous les codes NAF valides :
-${codesList}
-Utilise UNIQUEMENT des codes de cette liste exacte.`,
+          temperature: 0,
+          system: nafSystemPrompt(codesList),
           messages: [{ role: 'user', content: activity }],
         }),
         signal,
