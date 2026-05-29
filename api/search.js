@@ -74,27 +74,37 @@ async function resolveGeo(geo, apiKey) {
     return { code_postal: geo }
   }
 
-  // Sinon on demande à Claude de résoudre
-  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 100,
-      system: `Convertis une zone géographique française en paramètre API SIRENE.
+  // Sinon on demande à Claude de résoudre — timeout 10s, fallback sur échec
+  let claudeRes
+  try {
+    claudeRes = await withTimeout(
+      (signal) => fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 100,
+          system: `Convertis une zone géographique française en paramètre API SIRENE.
 Réponds UNIQUEMENT avec un JSON valide, sans markdown.
 Paramètres possibles (un seul) :
 - { "departement": "83" }   → pour un département (code 2 chiffres INSEE)
 - { "code_postal": "83000" } → pour un code postal
 - { "region": "93" }         → pour une région (code INSEE 2 chiffres : 84=AuRA, 93=PACA, 11=IDF, 75=NA, 76=OCC, 32=HDF, 28=Normandie, 53=Bretagne, 52=PDL, 44=GE, 27=BFC, 24=NA, 94=Corse)
 - { "q": "Lyon" }            → pour une ville (q = nom ville)`,
-      messages: [{ role: 'user', content: geo }],
-    }),
-  })
+          messages: [{ role: 'user', content: geo }],
+        }),
+        signal,
+      }),
+      10000,
+      'Claude-geo'
+    )
+  } catch {
+    return { q: geo } // timeout ou erreur réseau → fallback texte libre
+  }
 
   if (!claudeRes.ok) return { q: geo } // fallback
 
