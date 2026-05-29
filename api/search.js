@@ -1,57 +1,10 @@
 import { checkRateLimit } from './rate-limit.js'
 import { geoSystemPrompt } from '../prompts/sirenePrompts.js'
-
-const sleep = (ms) => new Promise(r => setTimeout(r, ms))
-
-function withTimeout(promise, ms, label) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), ms)
-  return promise(controller.signal).finally(() => clearTimeout(timer)).catch(err => {
-    if (err.name === 'AbortError') throw Object.assign(new Error(`Timeout ${label} (${ms}ms)`), { isTimeout: true, label })
-    throw err
-  })
-}
-
-async function fetchSirene(qs, retries = 2) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await withTimeout(
-      (signal) => fetch(`https://recherche-entreprises.api.gouv.fr/search?${qs}`, { signal }),
-      4000,
-      'SIRENE'
-    )
-    if (res.status === 429 && attempt < retries) {
-      await sleep(1000)
-      continue
-    }
-    return res
-  }
-}
-
-async function callSirene(params, res) {
-  const qs = new URLSearchParams(
-    Object.entries({ ...params, minimal: 'true', include: 'dirigeants,finances,siege' })
-      .filter(([, v]) => v !== undefined && v !== null && v !== '')
-  )
-  console.log('[search] Params SIRENE:', JSON.stringify(params))
-  const sireneRes = await fetchSirene(qs)
-  if (!sireneRes.ok) {
-    const errBody = await sireneRes.json().catch(() => ({}))
-    console.error('[search] Erreur SIRENE', sireneRes.status, JSON.stringify(errBody))
-    if (sireneRes.status === 429) return res.status(429).json({ error: 'rate_limit' })
-    if (sireneRes.status === 400) return res.status(400).json({ error: 'Paramètres invalides', detail: errBody, params })
-    return res.status(502).json({ error: 'Erreur API SIRENE', status: sireneRes.status })
-  }
-  const data = await sireneRes.json()
-  return res.json({
-    params,
-    results: data.results ?? [],
-    total: data.total_results ?? 0,
-  })
-}
+import { callHaiku } from '../src/lib/llmClient.js'
+import { searchSirene } from '../src/lib/inseeClient.js'
 
 // Résout la zone geo (ville / dept / CP / région) en paramètre SIRENE
 async function resolveGeo(geo, apiKey) {
-  // Tableau de sélections mixtes (communes + depts + régions)
   if (Array.isArray(geo)) {
     const depts = geo.filter(g => g.type === 'departement')
     const regions = geo.filter(g => g.type === 'region')
@@ -61,55 +14,19 @@ async function resolveGeo(geo, apiKey) {
     if (communes.length > 0) return { code_postal: communes.map(c => c.code_postal).join(',') }
     return {}
   }
-  // Objet déjà résolu (depuis l'autocomplete front)
   if (geo && typeof geo === 'object') return geo
 
   if (typeof geo === 'string') geo = geo.trim()
+  if (/^\d{2}$/.test(geo)) return { departement: geo }
+  if (/^\d{5}$/.test(geo)) return { code_postal: geo }
 
-  // Détection directe : code département 2 chiffres
-  if (/^\d{2}$/.test(geo)) {
-    return { departement: geo }
-  }
-  // Code postal 5 chiffres
-  if (/^\d{5}$/.test(geo)) {
-    return { code_postal: geo }
-  }
-
-  // Sinon on demande à Claude de résoudre — timeout 10s, fallback sur échec
-  let claudeRes
+  // Claude fallback — timeout 10s, dégradation silencieuse sur tout échec
   try {
-    claudeRes = await withTimeout(
-      (signal) => fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 100,
-          temperature: 0,
-          system: geoSystemPrompt,
-          messages: [{ role: 'user', content: geo }],
-        }),
-        signal,
-      }),
-      10000,
-      'Claude-geo'
-    )
-  } catch {
-    return { q: geo } // timeout ou erreur réseau → fallback texte libre
-  }
-
-  if (!claudeRes.ok) return { q: geo } // fallback
-
-  const data = await claudeRes.json()
-  try {
-    const raw = data.content[0].text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    const text = await callHaiku({ apiKey, system: geoSystemPrompt, userContent: geo, maxTokens: 100 })
+    const raw = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
     return JSON.parse(raw)
   } catch {
-    return { q: geo } // fallback : on passe la zone en mots-clés libres
+    return { q: geo }
   }
 }
 
@@ -121,6 +38,7 @@ export default async function handler(req, res) {
 
   const t0 = Date.now()
   const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() ?? req.socket?.remoteAddress ?? 'unknown'
+  let sireneParams = null
 
   try {
     const { naf_codes, geo, params: providedParams, status } = req.body ?? {}
@@ -129,7 +47,8 @@ export default async function handler(req, res) {
     if (providedParams && typeof providedParams === 'object') {
       const { allowed } = await checkRateLimit(ip, 'api/search', 50, 60)
       if (!allowed) return res.status(429).json({ error: 'rate_limit', message: 'Limite atteinte, réessayez dans une heure' })
-      return await callSirene(providedParams, res)
+      const { results, total } = await searchSirene(providedParams)
+      return res.json({ params: providedParams, results, total })
     }
 
     // Rate limiting
@@ -143,12 +62,9 @@ export default async function handler(req, res) {
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY absente' })
 
-    // Résolution geo
     const geoParams = await resolveGeo(geo, apiKey)
-
-    // Construction des params SIRENE
     const etat = Array.isArray(status) && status.length === 1 ? status[0] : undefined
-    const params = {
+    sireneParams = {
       ...geoParams,
       activite_principale: naf_codes.join(','),
       ...(etat ? { etat_administratif: etat } : {}),
@@ -156,15 +72,22 @@ export default async function handler(req, res) {
       page: 1,
     }
 
-    const result = await callSirene(params, res)
+    console.log('[search] Params SIRENE:', JSON.stringify(sireneParams))
+    const { results, total } = await searchSirene(sireneParams)
     console.log(`[search] OK en ${Date.now() - t0}ms`)
-    return result
+    return res.json({ params: sireneParams, results, total })
 
   } catch (err) {
     const elapsed = Date.now() - t0
     if (err.isTimeout) {
       console.error(`[search] Timeout ${err.label} après ${elapsed}ms`)
       return res.status(504).json({ error: 'timeout', service: err.label })
+    }
+    if (err.isSireneError) {
+      console.error('[search] Erreur SIRENE', err.status, JSON.stringify(err.body))
+      if (err.status === 429) return res.status(429).json({ error: 'rate_limit' })
+      if (err.status === 400) return res.status(400).json({ error: 'Paramètres invalides', detail: err.body, params: sireneParams })
+      return res.status(502).json({ error: 'Erreur API SIRENE', status: err.status })
     }
     console.error('[search] Exception', err)
     return res.status(500).json({ error: 'Erreur interne', message: err.message })

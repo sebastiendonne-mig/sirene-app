@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { fetchAllSirene } from '../src/lib/inseeClient.js'
 
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 const LIMIT = 2
 
 function getSupabase() {
@@ -21,31 +21,6 @@ async function getUsedToday(supabase, ip) {
   return count ?? 0
 }
 
-async function fetchAllPages(params) {
-  // Retire etat_administratif pour inclure actifs + cessés
-  const { per_page: _pp, page: _pg, ...base } = params
-  const results = []
-  let page = 1
-  let total = Infinity
-
-  while (results.length < total && page <= 20) {
-    const qs = new URLSearchParams(
-      Object.entries({ ...base, minimal: 'true', include: 'dirigeants,finances,siege', per_page: '25', page: String(page) })
-        .filter(([, v]) => v !== undefined && v !== null && v !== '')
-    )
-    const res = await fetch(`https://recherche-entreprises.api.gouv.fr/search?${qs}`)
-    if (!res.ok) break
-    const data = await res.json()
-    total = data.total_results ?? 0
-    const batch = data.results ?? []
-    results.push(...batch)
-    if (batch.length < 25) break
-    page++
-    if (page <= 20) await sleep(150)
-  }
-
-  return { results, total }
-}
 
 function mapRow(e) {
   const siege = e.siege ?? {}
@@ -105,7 +80,7 @@ export default async function handler(req, res) {
     const used = await getUsedToday(supabase, ip)
     if (used >= LIMIT) return res.json({ error: 'limit_reached', remaining: 0 })
 
-    const { results } = await fetchAllPages(params)
+    const { results } = await fetchAllSirene(params)
     const data = results.map(mapRow)
 
     await supabase.from('exports_log').insert({ ip, format, results_count: data.length })
