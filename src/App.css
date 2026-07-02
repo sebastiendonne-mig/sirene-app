@@ -958,3 +958,119 @@ body {
   0%   { transform: translateX(-150%); }
   100% { transform: translateX(350%); }
 }
+
+/* ─── APP LAYOUT ──────────────────────────────────────────── */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ─── TK BRAND HEADER ─────────────────────────────────────── */
+.tk-header {
+  height: var(--tk-header-height, 64px);
+  background: var(--tk-color-bg, #FFFFFF);
+  border-bottom: 1px solid var(--tk-color-border, #E2E8F0);
+  display: flex;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.tk-container {
+  max-width: var(--tk-container-max, 1200px);
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--tk-space-6, 1.5rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tk-space-4, 1rem);
+}
+
+.tk-logo-link {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.tk-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--tk-space-4, 1rem);
+}
+
+.tk-app-name {
+  font-family: var(--tk-font-sans, system-ui, sans-serif);
+  font-size: var(--tk-text-sm, 0.875rem);
+  font-weight: var(--tk-weight-medium, 500);
+  color: var(--tk-color-text-muted, #475569);
+}
+
+.tk-back-link {
+  font-family: var(--tk-font-sans, system-ui, sans-serif);
+  font-size: var(--tk-text-sm, 0.875rem);
+  font-weight: var(--tk-weight-medium, 500);
+  color: var(--tk-color-text-muted, #475569);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.tk-back-link:hover {
+  color: var(--tk-color-primary, #0D1F40);
+}
+
+/* ─── TK BRAND FOOTER ─────────────────────────────────────── */
+.tk-footer {
+  background: var(--tk-navy, #0D1F40);
+  padding: var(--tk-space-6, 1.5rem) 0;
+  margin-top: auto;
+}
+
+.tk-footer .tk-container {
+  flex-wrap: wrap;
+}
+
+.tk-footer-right {
+  display: flex;
+  align-items: center;
+  gap: var(--tk-space-6, 1.5rem);
+  flex-wrap: wrap;
+}
+
+.tk-footer-copy {
+  font-family: var(--tk-font-sans, system-ui, sans-serif);
+  font-size: var(--tk-text-sm, 0.875rem);
+  color: #94A3B8;
+}
+
+.tk-footer-link {
+  font-family: var(--tk-font-sans, system-ui, sans-serif);
+  font-size: var(--tk-text-sm, 0.875rem);
+  color: var(--tk-cyan, #00B4D8);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.tk-footer-link:hover {
+  color: var(--tk-cyan-light, #38C4E0);
+}
+
+.tk-footer-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--tk-font-sans, system-ui, sans-serif);
+  font-size: var(--tk-text-sm, 0.875rem);
+  color: var(--tk-cyan, #00B4D8);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s;
+}
+
+.tk-footer-btn:hover {
+  color: var(--tk-cyan-light, #38C4E0);
+}

@@ -533,6 +533,23 @@ function ExportPanel({ params, total, onClose }) {
   )
 }
 
+// ─── HEADER ───────────────────────────────────────────────────────────────────
+function Header() {
+  return (
+    <header className="tk-header">
+      <div className="tk-container">
+        <a href="https://tkoidra.com" className="tk-logo-link" aria-label="TKoidra — retour au portfolio">
+          <img src="/assets/logo-horizontal.svg" alt="TKoidra" height="32" />
+        </a>
+        <nav className="tk-nav" aria-label="Navigation principale">
+          <span className="tk-app-name">SIRENE Explorer</span>
+          <a href="https://tkoidra.com" className="tk-back-link">← Portfolio</a>
+        </nav>
+      </div>
+    </header>
+  )
+}
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
   // step: 1=saisie | 2=naf | 3=geo | 4=résultats
@@ -652,6 +669,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <Header />
       {/* Étape 1 — toujours affichée dans le hero, même en step 2/3/4 sous forme compacte */}
       {step === 1 && (
         <StepActivity onSubmit={handleActivitySubmit} loading={loading} />
@@ -761,13 +779,18 @@ export default function App() {
           </div>
         </main>
       )}
-      <footer className="footer">
-        <p className="footer-text">Données issues de la base SIRENE — INSEE — Données publiques</p>
-        <p className="footer-links">
-          <button className="footer-link" onClick={() => setLegalOpen(true)}>Mentions légales</button>
-          {' · '}
-          <button className="footer-link" onClick={() => setLegalOpen(true)}>Politique de confidentialité</button>
-        </p>
+      <footer className="tk-footer">
+        <div className="tk-container">
+          <div className="tk-footer-left">
+            <img src="/assets/logo-horizontal-white.svg" alt="TKoidra" height="24" />
+          </div>
+          <div className="tk-footer-right">
+            <span className="tk-footer-copy">© 2026 TKoidra</span>
+            <a href="https://tkoidra.com" className="tk-footer-link">Portfolio</a>
+            <a href="https://linkedin.com/in/sebastiendonne" className="tk-footer-link" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
+            <button className="tk-footer-btn" onClick={() => setLegalOpen(true)}>Mentions légales</button>
+          </div>
+        </div>
       </footer>
 
       {legalOpen && <LegalModal onClose={() => setLegalOpen(false)} />}
