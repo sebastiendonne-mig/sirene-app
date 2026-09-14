@@ -10,15 +10,22 @@ Domaine : sirene.tkoidra.com
 ## 1. Architecture & Isolation IA
 
 ### Prompts
-Tous les prompts LLM doivent être centralisés dans `prompts/sirenePrompts.js`, **hors logique métier**.  
-Aujourd'hui ils sont hardcodés dans `api/naf.js` (résolution NAF) et `api/search.js` (résolution géo) — toute modification de prompt passe par ce fichier unique.
+Tous les prompts LLM sont centralisés dans `prompts/sirenePrompts.js`, hors logique métier.  
+Toute modification de prompt passe par ce fichier unique.
 
-### Clients isolés (cible)
-- `src/lib/llmClient.js` — wrappeur Haiku (fetch vers `api.anthropic.com/v1/messages`). La logique de retry/timeout ne doit pas être dupliquée entre `api/naf.js` et `api/search.js`.
-- `src/lib/inseeClient.js` — client SIRENE (`recherche-entreprises.api.gouv.fr/search`). La pagination est dupliquée entre `api/search.js` (`fetchSirene`) et `api/export.js` (`fetchAllPages`) — à unifier ici.
+### Clients isolés
+- `src/lib/llmClient.js` — `callHaiku()` + `withTimeout()`. Retry exponentiel intégré. `withTimeout` est exporté pour usage dans `inseeClient.js`.
+- `src/lib/inseeClient.js` — `searchSirene()` (page unique) + `fetchAllSirene()` (pagination export). Retry exponentiel intégré sur les deux fonctions.
+
+### Validation des réponses LLM
+Chaque sortie JSON de Haiku est validée via Zod avant utilisation :
+- `nafLlmResponseSchema` — valide `{ codes: [{ code, label }] }`, pattern `/^\d{2}\.\d{2}[A-Z]$/`, 1–6 codes
+- `geoLlmResponseSchema` — union des 5 formes SIRENE valides (`departement`, `code_postal`, `region`, `commune`, `q`)
+
+Schémas dans `src/types/sireneSchemas.js`.
 
 ### Température LLM
-`temperature: 0` **imposé** sur tous les appels d'extraction et de parsing (résolution NAF, résolution géo).  
+`temperature: 0` imposé sur tous les appels d'extraction et de parsing.  
 Aucun appel Haiku ne doit omettre ce paramètre.
 
 ### Variables d'environnement
@@ -29,41 +36,34 @@ Aucune valeur en dur. Variables utilisées dans le projet :
 | `ANTHROPIC_API_KEY` | `api/naf.js`, `api/search.js` | Clé API Anthropic |
 | `SUPABASE_URL` | `api/rate-limit.js`, `api/export.js`, `api/export-quota.js` | URL projet Supabase |
 | `SUPABASE_SERVICE_KEY` | `api/rate-limit.js`, `api/export.js`, `api/export-quota.js` | Clé service Supabase (bypass RLS) |
+| `VITE_SUPABASE_URL` | `api/log.js` | URL REST Supabase (doit finir par `/rest/v1/`) |
 | `VITE_SUPABASE_ANON_KEY` | `api/log.js` | Clé anon Supabase (browser-safe) |
 
-Le fichier `.env.example` doit refléter exactement cette liste à chaque ajout de variable.
+Le fichier `.env.example` reflète exactement cette liste.  
+Note Vercel : `SUPABASE_URL` et `SUPABASE_SERVICE_KEY` sont des variables Sensitive — elles ne peuvent pas être ajoutées en environnement Development via le dashboard Vercel. Couvertes par `.env.local` en local.
 
 ---
 
 ## 2. Robustesse & Gestion des erreurs
 
 ### Try/catch
-Tous les appels externes sont dans un `try/catch`. Conventions actuelles :
-- `api/search.js` : handler global + `withTimeout()` sur SIRENE
-- `api/naf.js` : try/catch sur l'appel Haiku
-- `api/export.js` : try/catch sur la pagination SIRENE
+Tous les appels externes sont dans un `try/catch`. Le catch dispatche sur les types d'erreur typés :
+- `err.isTimeout` → 504
+- `err.isSireneError` → 429 / 400 / 502 selon `err.status`
+- `err.isApiError` → 502
+- autres → 500
 
 ### Timeout
-**10s max** sur chaque requête externe. Actuellement :
-- SIRENE : 4s via `withTimeout()` dans `api/search.js` — à aligner sur 10s
-- Claude : **aucun timeout** dans `api/naf.js` ni `api/search.js` — à corriger en priorité
-
-Utiliser le pattern `withTimeout(signal => fetch(url, { signal }), 10000, 'LABEL')` déjà présent dans `api/search.js`.
+10s sur chaque requête externe via `withTimeout(signal => fetch(url, { signal }), 10000, 'LABEL')`.  
+Implémenté dans `callHaiku()` et dans chaque appel SIRENE (`searchSirene`, `fetchAllSirene` page par page).
 
 ### Retry
-Retry avec backoff exponentiel sur `429`, `502`, `503`, `504`.  
-Actuellement implémenté sur SIRENE dans `fetchSirene()` (`api/search.js`) pour le 429 uniquement.  
-Manque : retry sur Claude, retry sur les codes 502/503/504.
+Backoff exponentiel (1s, 2s) sur `429`, `502`, `503`, `504`, 2 tentatives max.  
+Implémenté dans `callHaiku()`, `searchSirene()`, et par page dans `fetchAllSirene()`.
 
 ### Enrichissement non-bloquant
-Tout appel LLM de résolution (géo, NAF) doit dégrader gracieusement :  
-`catch → return { q: inputBrut }` (fallback texte libre), jamais de crash propagé.  
-Ce pattern est déjà en place dans `resolveGeo()` de `api/search.js`.
-
-### Validation des réponses LLM
-Chaque `JSON.parse(raw)` sur une réponse Haiku doit être suivi d'une validation de structure.  
-Cible : schémas Zod dans `src/types/sireneSchemas.js`.  
-En attendant : vérifier au minimum la présence des champs attendus avant de les utiliser.
+Les appels LLM de résolution (géo, NAF) dégradent gracieusement :  
+`catch → return { q: inputBrut }` dans `resolveGeo()`, jamais de crash propagé.
 
 ---
 
@@ -84,10 +84,10 @@ Si Supabase est indisponible, `checkRateLimit()` retourne `{ allowed: true }` �
 
 ## 4. Tests & Golden Dataset
 
-- `tests/fixtures/sirene_evals.json` — 10 cas de référence couvrant : résolution NAF, résolution géo, filtres statut, pagination
-- `tests/runEvals.js` — script de régression exécutable par `node tests/runEvals.js`
-- Les tests **ne consomment pas de quota API** : les appels Claude et SIRENE sont mockés par défaut
-- Toute modification dans `prompts/sirenePrompts.js`, `api/naf.js` ou `api/search.js` doit passer les evals avant commit
+- `tests/fixtures/sirene_evals.json` — 28 cas couvrant : schémas NAF, schémas géo, handler `/api/naf`, handler `/api/search`, retry 502/503/504
+- `tests/runEvals.js` — runner sans dépendance externe, exécutable par `node tests/runEvals.js` (alias `npm test`)
+- Les tests ne consomment pas de quota API : `global.fetch` est mocké, Supabase absent → fail-open
+- Toute modification dans `prompts/sirenePrompts.js`, `api/naf.js`, `api/search.js`, `src/lib/llmClient.js` ou `src/lib/inseeClient.js` doit passer les evals avant déploiement
 
 ---
 
@@ -95,7 +95,7 @@ Si Supabase est indisponible, `checkRateLimit()` retourne `{ allowed: true }` �
 
 - `README.md` à jour à chaque évolution : prérequis, `npm install`, variables d'env, `npm run dev`, flux de données
 - Commentaires dans le code = uniquement le **"Pourquoi"** : contrainte INSEE, workaround API, invariant non-évident
-- Ne pas commenter le "Comment" — les noms de fonctions et variables suffisent (`resolveGeo`, `fetchAllPages`, `checkRateLimit`)
+- Ne pas commenter le "Comment" — les noms de fonctions et variables suffisent
 
 ---
 
@@ -110,4 +110,4 @@ Si Supabase est indisponible, `checkRateLimit()` retourne `{ allowed: true }` �
 
 ## 7. Backlog
 
-- **V2** : Export CSV payant (Stripe) — la table `exports_log` est déjà en place pour la facturation
+- **V2** : Export payant via Stripe — la table `exports_log` est déjà en place pour la facturation
