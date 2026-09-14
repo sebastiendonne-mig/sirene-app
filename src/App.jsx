@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { track } from '@vercel/analytics'
 import './App.css'
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : ''
@@ -250,7 +251,16 @@ function StepGeo({ onBack, onSubmit, loading }) {
       const results = []
       if (communesRes.status === 'fulfilled' && Array.isArray(communesRes.value)) {
         communesRes.value.forEach(c => {
-          ;(c.codesPostaux ?? []).forEach(cp => {
+          const cps = c.codesPostaux ?? []
+          if (cps.length > 1) {
+            results.push({
+              id: `city-all-${c.nom}`,
+              label: `${c.nom} — toute la ville`,
+              type: 'ville_entiere',
+              codes_postaux: cps,
+            })
+          }
+          cps.forEach(cp => {
             results.push({ id: `commune-${cp}`, label: `${c.nom} (${cp})`, type: 'commune', code_postal: cp })
           })
         })
@@ -265,7 +275,7 @@ function StepGeo({ onBack, onSubmit, loading }) {
           results.push({ id: `region-${r.code}`, label: `${r.nom} — toute la région`, type: 'region', code: r.code })
         })
       }
-      setSuggestions(results.slice(0, 10))
+      setSuggestions(results.slice(0, 30))
       setSelected([])
     } catch {
       setSuggestions([])
@@ -437,6 +447,7 @@ function ExportPanel({ params, total, onClose }) {
       }
       if (json.error) throw new Error(json.error)
       await generateFile(json.data, format)
+      track('export_csv', { results_count: json.data.length })
       setRemaining(json.remaining ?? 0)
       setPhase('done')
     } catch {
@@ -760,7 +771,7 @@ export default function App() {
                   : (
                     <>
                       <div className="cards">
-                        {results.map(e => <Card key={e.siren} e={e} />)}
+                        {results.map(e => <Card key={e.siren} e={e} searchParams={searchParams} />)}
                       </div>
                       {hasMore && (
                         <div className="load-more-wrap">
@@ -798,7 +809,33 @@ export default function App() {
   )
 }
 
-function Card({ e }) {
+function highlightCp(adresse, cp) {
+  if (!adresse || !cp) return adresse
+  const idx = adresse.indexOf(cp)
+  if (idx === -1) return adresse
+  return (
+    <>
+      {adresse.slice(0, idx)}
+      <mark className="cp-hl">{cp}</mark>
+      {adresse.slice(idx + cp.length)}
+    </>
+  )
+}
+
+function isOutsideZone(siege, searchParams) {
+  if (!searchParams || !siege) return false
+  if (searchParams.code_postal) {
+    const searched = searchParams.code_postal.split(',')
+    return !searched.includes(siege.code_postal ?? '')
+  }
+  if (searchParams.departement) {
+    return (siege.departement ?? '') !== searchParams.departement
+  }
+  // region / q : impossible à vérifier sans mapping — pas de badge
+  return false
+}
+
+function Card({ e, searchParams }) {
   const siege = e.siege ?? {}
   const nom = e.nom_complet ?? '—'
   const cp = siege.code_postal ?? ''
@@ -814,6 +851,16 @@ function Card({ e }) {
   const resultat = fin?.resultat_net != null ? formatMontant(fin.resultat_net) : null
   const nbOuverts = e.nombre_etablissements_ouverts ?? null
 
+  const matchingEtabs = (e.matching_etablissements ?? [])
+    .filter(m => !m.est_siege && m.etat_administratif === 'A')
+  const searchedCps = searchParams?.code_postal
+    ? new Set(searchParams.code_postal.split(','))
+    : null
+  // Variante A : badge vert seulement si les deux statuts sont affichés (pas de filtre unique)
+  const bothStatuses = !searchParams?.etat_administratif
+  const showActiveBadge = bothStatuses && e.etat_administratif === 'A'
+  const showClosedBadge = e.etat_administratif === 'C'
+
   return (
     <article className="card">
       <div className="card-body">
@@ -825,13 +872,36 @@ function Card({ e }) {
           <p className="card-sector card-sector--code">{naf}</p>
         )}
         {(ville || cp) && (
-          <p className="card-location">{[ville, cp].filter(Boolean).join(' · ')}</p>
+          <p className="card-location">
+            {[ville, cp].filter(Boolean).join(' · ')}
+            {isOutsideZone(siege, searchParams) && (
+              <span className="card-hors-zone">Siège hors zone</span>
+            )}
+          </p>
+        )}
+        {matchingEtabs.length > 0 && (
+          <ul className="card-etabs">
+            {matchingEtabs.map(m => (
+              <li key={m.siret} className="card-etab">
+                {searchedCps?.has(m.code_postal)
+                  ? highlightCp(m.adresse, m.code_postal)
+                  : m.adresse
+                }
+              </li>
+            ))}
+          </ul>
         )}
         <div className="card-meta">
+          {showActiveBadge && <span className="card-badge card-badge--active">En activité</span>}
+          {showClosedBadge && <span className="card-badge card-badge--closed">Cessée</span>}
           {njLabel && <span className="card-meta-item">{njLabel}</span>}
           {tranche && <span className="card-meta-item">{tranche} sal.</span>}
           {annee && <span className="card-meta-item">Créée en {annee}</span>}
-          {nbOuverts != null && <span className="card-meta-item">{nbOuverts} étab. actif{nbOuverts > 1 ? 's' : ''}</span>}
+          {nbOuverts != null && (
+            e.siren
+              ? <a href={`https://annuaire-entreprises.data.gouv.fr/entreprise/${e.siren}`} target="_blank" rel="noopener noreferrer" className="card-meta-item card-meta-link">{nbOuverts} étab. actif{nbOuverts > 1 ? 's' : ''}</a>
+              : <span className="card-meta-item">{nbOuverts} étab. actif{nbOuverts > 1 ? 's' : ''}</span>
+          )}
         </div>
         {dirigeant && (
           <p className="card-dirigeant">
