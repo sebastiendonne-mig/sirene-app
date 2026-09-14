@@ -2,6 +2,7 @@ import { createRequire } from 'module'
 import { checkRateLimit } from './rate-limit.js'
 import { callHaiku } from '../src/lib/llmClient.js'
 import { nafSystemPrompt } from '../prompts/sirenePrompts.js'
+import { nafLlmResponseSchema } from '../src/types/sireneSchemas.js'
 
 const require = createRequire(import.meta.url)
 const nafCodes = require('./naf-codes.json')
@@ -26,8 +27,12 @@ export default async function handler(req, res) {
   try {
     const text = await callHaiku({ apiKey, system: nafSystemPrompt(codesList), userContent: activity, maxTokens: 600 })
     const raw = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-    const parsed = JSON.parse(raw)
-    return res.json({ codes: parsed.codes ?? [] })
+    const result = nafLlmResponseSchema.safeParse(JSON.parse(raw))
+    if (!result.success) {
+      console.error('[naf] Réponse LLM invalide:', result.error.message)
+      return res.status(502).json({ error: 'Réponse LLM invalide' })
+    }
+    return res.json({ codes: result.data.codes })
   } catch (err) {
     console.error('[naf] Erreur:', err.message)
     if (err.isTimeout) return res.status(504).json({ error: 'timeout', service: err.label })

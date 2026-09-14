@@ -2,6 +2,7 @@ import { checkRateLimit } from './rate-limit.js'
 import { geoSystemPrompt } from '../prompts/sirenePrompts.js'
 import { callHaiku } from '../src/lib/llmClient.js'
 import { searchSirene } from '../src/lib/inseeClient.js'
+import { geoLlmResponseSchema } from '../src/types/sireneSchemas.js'
 
 // Résout la zone geo (ville / dept / CP / région) en paramètre SIRENE
 async function resolveGeo(geo, apiKey) {
@@ -9,8 +10,10 @@ async function resolveGeo(geo, apiKey) {
     const depts = geo.filter(g => g.type === 'departement')
     const regions = geo.filter(g => g.type === 'region')
     const communes = geo.filter(g => g.type === 'commune')
+    const villesEnt = geo.filter(g => g.type === 'ville_entiere')
     if (depts.length > 0) return { departement: depts[0].code }
     if (regions.length > 0) return { region: regions[0].code }
+    if (villesEnt.length > 0) return { code_postal: villesEnt.flatMap(v => v.codes_postaux).join(',') }
     if (communes.length > 0) return { code_postal: communes.map(c => c.code_postal).join(',') }
     return {}
   }
@@ -24,7 +27,9 @@ async function resolveGeo(geo, apiKey) {
   try {
     const text = await callHaiku({ apiKey, system: geoSystemPrompt, userContent: geo, maxTokens: 100 })
     const raw = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-    return JSON.parse(raw)
+    const result = geoLlmResponseSchema.safeParse(JSON.parse(raw))
+    if (!result.success) return { q: geo }
+    return result.data
   } catch {
     return { q: geo }
   }
