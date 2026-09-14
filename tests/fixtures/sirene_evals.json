@@ -1,0 +1,185 @@
+{
+  "description": "Golden dataset — résolution NAF, résolution géo, validation Zod, handlers",
+
+  "naf_schema": [
+    {
+      "id": "naf_valid_single",
+      "description": "Un code valide avec label",
+      "input": { "codes": [{ "code": "43.22A", "label": "Travaux d'installation d'eau et de gaz en tous locaux" }] },
+      "expect": "valid"
+    },
+    {
+      "id": "naf_valid_multiple",
+      "description": "Plusieurs codes valides (plombier)",
+      "input": { "codes": [
+        { "code": "43.22A", "label": "Travaux d'installation d'eau et de gaz en tous locaux" },
+        { "code": "43.22B", "label": "Travaux d'installation d'équipements thermiques et de climatisation" }
+      ]},
+      "expect": "valid"
+    },
+    {
+      "id": "naf_invalid_string_codes",
+      "description": "Codes sous forme de strings (ancien format attendu par erreur)",
+      "input": { "codes": ["43.22A", "43.22B"] },
+      "expect": "invalid"
+    },
+    {
+      "id": "naf_invalid_empty_array",
+      "description": "Tableau vide — min(1) doit rejeter",
+      "input": { "codes": [] },
+      "expect": "invalid"
+    },
+    {
+      "id": "naf_invalid_no_dot",
+      "description": "Code sans point (4322A) — regex doit rejeter",
+      "input": { "codes": [{ "code": "4322A", "label": "Plomberie" }] },
+      "expect": "invalid"
+    },
+    {
+      "id": "naf_invalid_wrong_key",
+      "description": "Clé results au lieu de codes",
+      "input": { "results": [{ "code": "43.22A", "label": "Plomberie" }] },
+      "expect": "invalid"
+    }
+  ],
+
+  "geo_schema": [
+    {
+      "id": "geo_valid_departement_2",
+      "description": "Département 2 chiffres",
+      "input": { "departement": "75" },
+      "expect": "valid"
+    },
+    {
+      "id": "geo_valid_departement_3",
+      "description": "Département 3 chiffres (DOM-TOM)",
+      "input": { "departement": "974" },
+      "expect": "valid"
+    },
+    {
+      "id": "geo_valid_code_postal",
+      "description": "Code postal 5 chiffres",
+      "input": { "code_postal": "13001" },
+      "expect": "valid"
+    },
+    {
+      "id": "geo_valid_multi_cp",
+      "description": "Plusieurs codes postaux séparés par virgule",
+      "input": { "code_postal": "13001,13002,13003" },
+      "expect": "valid"
+    },
+    {
+      "id": "geo_valid_region",
+      "description": "Région code INSEE 2 chiffres",
+      "input": { "region": "93" },
+      "expect": "valid"
+    },
+    {
+      "id": "geo_valid_q",
+      "description": "Champ q texte libre (fallback ville)",
+      "input": { "q": "Lyon" },
+      "expect": "valid"
+    },
+    {
+      "id": "geo_invalid_unknown_key",
+      "description": "Clé ville non reconnue par l'union",
+      "input": { "ville": "Paris" },
+      "expect": "invalid"
+    },
+    {
+      "id": "geo_invalid_dept_letters",
+      "description": "Département avec lettres (IDF)",
+      "input": { "departement": "IDF" },
+      "expect": "invalid"
+    }
+  ],
+
+  "naf_handler": [
+    {
+      "id": "handler_naf_plombier",
+      "description": "Activité plombier → codes NAF valides renvoyés",
+      "req_body": { "activity": "plombier" },
+      "claude_mock": { "codes": [
+        { "code": "43.22A", "label": "Travaux d'installation d'eau et de gaz en tous locaux" },
+        { "code": "43.22B", "label": "Travaux d'installation d'équipements thermiques et de climatisation" }
+      ]},
+      "expect_status": 200,
+      "expect_codes": ["43.22A", "43.22B"]
+    },
+    {
+      "id": "handler_naf_invalid_llm",
+      "description": "LLM renvoie une structure invalide (results au lieu de codes) → 502",
+      "req_body": { "activity": "plombier" },
+      "claude_mock": { "results": [{ "code": "43.22A" }] },
+      "expect_status": 502
+    },
+    {
+      "id": "handler_naf_missing_activity",
+      "description": "Paramètre activity absent → 400 sans appel Claude",
+      "req_body": {},
+      "expect_status": 400
+    },
+    {
+      "id": "handler_naf_empty_activity",
+      "description": "activity vide → 400",
+      "req_body": { "activity": "   " },
+      "expect_status": 400
+    }
+  ],
+
+  "search_handler": [
+    {
+      "id": "handler_search_dept_regex",
+      "description": "Géo département par regex — pas d'appel Claude",
+      "req_body": { "naf_codes": ["43.22A"], "geo": "75", "status": ["A"] },
+      "sirene_mock": {
+        "results": [{ "siren": "123456789", "nom_complet": "PLOMBERIE DU MARAIS", "siege": {}, "dirigeants": [], "finances": {} }],
+        "total_results": 1
+      },
+      "expect_status": 200,
+      "expect_params_key": "departement",
+      "expect_params_value": "75"
+    },
+    {
+      "id": "handler_search_cp_regex",
+      "description": "Géo code postal par regex — pas d'appel Claude",
+      "req_body": { "naf_codes": ["43.22A"], "geo": "13001" },
+      "sirene_mock": { "results": [], "total_results": 0 },
+      "expect_status": 200,
+      "expect_params_key": "code_postal",
+      "expect_params_value": "13001"
+    },
+    {
+      "id": "handler_search_geo_claude",
+      "description": "Géo région via Claude (Bretagne → region 53)",
+      "req_body": { "naf_codes": ["47.24Z"], "geo": "Bretagne" },
+      "claude_mock": { "region": "53" },
+      "sirene_mock": { "results": [], "total_results": 0 },
+      "expect_status": 200,
+      "expect_params_key": "region",
+      "expect_params_value": "53"
+    },
+    {
+      "id": "handler_search_geo_invalid_claude",
+      "description": "Claude renvoie géo invalide → fallback {q: geo}",
+      "req_body": { "naf_codes": ["43.22A"], "geo": "quelque part" },
+      "claude_mock": { "ville": "quelque part" },
+      "sirene_mock": { "results": [], "total_results": 0 },
+      "expect_status": 200,
+      "expect_params_key": "q",
+      "expect_params_value": "quelque part"
+    },
+    {
+      "id": "handler_search_missing_naf",
+      "description": "naf_codes absent → 400",
+      "req_body": { "geo": "75" },
+      "expect_status": 400
+    },
+    {
+      "id": "handler_search_missing_geo",
+      "description": "geo absent → 400",
+      "req_body": { "naf_codes": ["43.22A"] },
+      "expect_status": 400
+    }
+  ]
+}
